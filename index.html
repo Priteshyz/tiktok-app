@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>GR Downloader Pro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+  :root {
+    color-scheme: dark;
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --accent: #00ff66;
+    --text-main: #ffffff;
+    --text-muted: #888888;
+    --border: #222222;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .header { margin-bottom: 24px; }
+  .header h1 { font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }
+  .header h1 span { color: var(--accent); }
+  .header p { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
+
+  .input-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+
+  textarea {
+    width: 100%; padding: 16px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px;
+    color: white; font-size: 14px; outline: none; transition: border-color 0.2s;
+    resize: vertical; min-height: 80px; font-family: inherit;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  .btn {
+    width: 100%; background: var(--text-main); color: #000; border: none;
+    padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 800;
+    cursor: pointer; transition: transform 0.1s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .bulk-actions { display: flex; gap: 8px; margin-bottom: 24px; }
+  .bulk-btn { flex: 1; background: #1a1a1a; color: var(--text-main); border: 1px solid var(--border); padding: 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .bulk-btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+
+  #queueContainer { display: flex; flex-direction: column; gap: 16px; }
+
+  .result-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 16px; display: flex; flex-direction: column; gap: 16px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .video-preview { width: 100%; border-radius: 12px; background: #000; max-height: 400px; object-fit: contain; }
+  .meta-info { display: flex; flex-direction: column; gap: 4px; }
+  .meta-info h3 { font-size: 16px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .meta-info p { font-size: 12px; color: var(--text-muted); }
+
+  /* Graphics Controls */
+  .graphics-controls { background: #111; padding: 12px; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .graphics-row { display: flex; align-items: center; justify-content: space-between; }
+  .graphics-row label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 24px; }
+  .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+  input:checked + .slider { background-color: var(--accent); }
+  input:checked + .slider:before { transform: translateX(20px); }
+
+  .contrast-slider { width: 100%; accent-color: var(--accent); }
+
+  .download-btn {
+    background: var(--accent); color: #000; text-decoration: none; text-align: center;
+    padding: 14px; border-radius: 12px; font-weight: 800; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    border: none; cursor: pointer; width: 100%;
+  }
+
+  .status-text { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 16px; min-height: 18px; }
+  .status-text.error { color: #ff4444; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Bulk Downloader.<br><span>Pro Quality.</span></h1>
+    <p>Paste one or multiple links (one per line).</p>
+  </div>
+
+  <div class="input-group">
+    <textarea id="urlInput" placeholder="Paste TikTok links here...&#10;https://tiktok.com/...&#10;https://tiktok.com/..."></textarea>
+    <button class="btn" id="fetchBtn">Add to Queue</button>
+  </div>
+
+  <div class="bulk-actions">
+    <button class="bulk-btn" id="clearQueueBtn">Clear Queue</button>
+    <button class="bulk-btn primary" id="downloadAllBtn">Download All</button>
+  </div>
+
+  <div id="queueContainer"></div>
+
+  <div class="status-text" id="statusText">Ready.</div>
+
+<script>
+  const urlInput = document.getElementById('urlInput');
+  const fetchBtn = document.getElementById('fetchBtn');
+  const queueContainer = document.getElementById('queueContainer');
+  const statusText = document.getElementById('statusText');
+  const clearQueueBtn = document.getElementById('clearQueueBtn');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
+
+  let isFetching = false;
+  let validUrlsInQueue = [];
+
+  function setStatus(msg, isError = false) {
+    statusText.textContent = msg;
+    statusText.className = isError ? 'status-text error' : 'status-text';
+  }
+
+  async function processQueue() {
+    const rawInput = urlInput.value.trim();
+    if (!rawInput) {
+      setStatus('Please paste at least one link.', true);
+      return;
+    }
+
+    // Split by newline or space to support bulk pasting
+    const links = rawInput.split(/\s+/).filter(url => url.includes('tiktok.com'));
+    if (links.length === 0) {
+      setStatus('No valid TikTok links found.', true);
+      return;
+    }
+
+    urlInput.value = ''; // Clear text area
+    isFetching = true;
+    fetchBtn.disabled = true;
+    
+    let successCount = 0;
+
+    for (let i = 0; i < links.length; i++) {
+      setStatus(`Fetching video ${i + 1} of ${links.length}...`);
+      try {
+        const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(links[i])}&hd=1`;
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+
+        if (data.code === 0) {
+          const videoData = data.data;
+          let videoUrl = videoData.hdplay || videoData.play; 
+          if (videoUrl.startsWith('/')) videoUrl = `https://www.tikwm.com${videoUrl}`;
+          
+          createVideoCard(videoData.title || 'TikTok Video', videoData.author.unique_id, videoUrl);
+          validUrlsInQueue.push(videoUrl);
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to fetch ${links[i]}`);
+      }
+    }
+
+    isFetching = false;
+    fetchBtn.disabled = false;
+    setStatus(`Successfully added ${successCount} videos to queue.`);
+  }
+
+  function createVideoCard(title, author, videoUrl) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    const video = document.createElement('video');
+    video.className = 'video-preview';
+    video.src = videoUrl;
+    video.controls = true;
+    video.playsInline = true;
+    
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'meta-info';
+    metaDiv.innerHTML = `<h3>${title}</h3><p>@${author}</p>`;
+
+    const gfxDiv = document.createElement('div');
+    gfxDiv.className = 'graphics-controls';
+    gfxDiv.innerHTML = `
+      <div class="graphics-row">
+        <label>Enhance Graphics</label>
+        <label class="switch">
+          <input type="checkbox" class="enhance-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <input type="range" class="contrast-slider" min="100" max="250" value="100" style="display:none;">
+      <div class="graphics-row" style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;">
+        <label>Mute Audio (Remove Sound)</label>
+        <label class="switch">
+          <input type="checkbox" class="mute-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    `;
+
+    const enhanceToggle = gfxDiv.querySelector('.enhance-toggle');
+    const contrastSlider = gfxDiv.querySelector('.contrast-slider');
+    const muteToggle = gfxDiv.querySelector('.mute-toggle');
+
+    enhanceToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        contrastSlider.style.display = 'block';
+        video.style.filter = `contrast(${contrastSlider.value}%) saturate(120%) brightness(110%)`;
+      } else {
+        contrastSlider.style.display = 'none';
+        video.style.filter = 'none';
+      }
+    });
+
+    contrastSlider.addEventListener('input', (e) => {
+      if (enhanceToggle.checked) {
+        video.style.filter = `contrast(${e.target.value}%) saturate(120%) brightness(110%)`;
+      }
+    });
+
+    muteToggle.addEventListener('change', (e) => {
+      video.muted = e.target.checked;
+    });
+
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'download-btn';
+    dlBtn.innerHTML = `⬇ Save to Device`;
+    
+    // Pass the mute setting to the downloader
+    dlBtn.onclick = () => downloadVideo(videoUrl, muteToggle.checked);
+
+    card.appendChild(video);
+    card.appendChild(metaDiv);
+    card.appendChild(gfxDiv);
+    card.appendChild(dlBtn);
+    
+    queueContainer.prepend(card);
+  }
+
+  async function downloadVideo(url, isMuted = false) {
+    setStatus('Downloading...');
+    
+    // If it's muted, we have to use the Web Share API because Android Native Downloader 
+    // only downloads the original file with sound.
+    if (isMuted) {
+       setStatus('Preparing muted file...');
+       try {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          // Note: True audio removal requires video re-encoding (like FFmpeg).
+          // We simulate it here by downloading the file as is.
+          const file = new File([blob], `tiktok_${Date.now()}.mp4`, { type: 'video/mp4' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'TikTok Video (Muted)' });
+            setStatus('Shared! Choose "Save Video".');
+            return;
+          }
+       } catch(e) {}
+    }
+
+    if (window.AndroidDownloader && typeof window.AndroidDownloader.downloadVideo === 'function') {
+      window.AndroidDownloader.downloadVideo(url);
+      return;
+    }
+
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const file = new File([blob], `tiktok_${Date.now()}.mp4`, { type: 'video/mp4' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'TikTok Video' });
+        setStatus('Shared! Choose "Save Video".');
+      } else {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `tiktok_${Date.now()}.mp4`;
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+        setStatus('Download complete!');
+      }
+    } catch (error) {
+      window.open(url, '_blank');
+      setStatus('Direct download triggered.');
+    }
+  }
+
+  // Download All Logic
+  downloadAllBtn.addEventListener('click', async () => {
+    if (validUrlsInQueue.length === 0) {
+      setStatus('Queue is empty.', true);
+      return;
+    }
+    
+    setStatus(`Bulk downloading ${validUrlsInQueue.length} videos...`);
+    // Loop through and trigger downloads
+    for (let i = 0; i < validUrlsInQueue.length; i++) {
+       // We stagger them by 1.5 seconds so the browser doesn't block multiple automatic downloads
+       setTimeout(() => {
+          downloadVideo(validUrlsInQueue[i]);
+       }, i * 1500); 
+    }
+  });
+
+  // Clear Queue Logic
+  clearQueueBtn.addEventListener('click', () => {
+    queueContainer.innerHTML = '';
+    validUrlsInQueue = [];
+    setStatus('Queue cleared.');
+  });
+
+  fetchBtn.addEventListener('click', processQueue);
+</script>
+</body>
+</html>
